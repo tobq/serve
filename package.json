@@ -1,0 +1,19 @@
+{
+  "name": "serve",
+  "version": "1.0.0",
+  "description": "server",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tobq/serve.git"
+  },
+  "author": "Tobi Akinyemi",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/tobq/serve/issues"
+  },
+  "homepage": "https://github.com/tobq/serve#readme"
+}
