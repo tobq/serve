@@ -12,7 +12,7 @@ function captcha(req, res, next) {
     if ("g-recaptcha-response" in req.body) {
         request("https://google.com/recaptcha/api/siteverify?secret=6LfI2QgUAAAAAKDhGdSleU2rEjHLC7WsPvsoSej5&response=" +
             req.body["g-recaptcha-response"], function (err, response, body) {
-            if (err) res500(req, res, err);
+            if (err) this.res500(req, res, err);
             else if (response.statusCode !== 200) res.writeHead(412);
             else {
                 try {
@@ -32,7 +32,7 @@ function captcha(req, res, next) {
 
 function SQLPool(req, res, next) {
     pool.connect(function (err, con) {
-        if (err) return res500(req, res, err);
+        if (err) return this.res500(req, res, err);
         req.sql = con;
         next();
     })
@@ -45,41 +45,6 @@ function resRedirect(res, url) {
     res.end();
 }
 
-function route(path, req, res) {
-    function next() {
-        route[routerIndex++](req, res, next)
-    }
-
-    let routerIndex = 0,
-        route = (path.indexOf(":") === -1 ? router : router.param)[req.method][path];
-
-    if (req.method === "GET") next();
-    else {
-        req.body = {};
-        req.files = {};
-
-        const busboy = new Busboy({headers: req.headers});
-        busboy.on("file", function (fieldname, file, filename, encoding, mimetype) {
-            const buffs = [];
-            file.on("data", data => buffs.push(data));
-            file.on("end", function () {
-                req.files[fieldname] = Buffer.concat(buffs);
-            });
-        });
-        busboy.on("field", function (fieldname, val, fieldnameTruncated, valTruncated, encoding, mimetype) {
-            req.body[fieldname] = val;
-        });
-        busboy.on("finish", function () {
-            console.log(req.body, req.files);
-            next();
-        });
-        busboy.on("error", function (err) {
-            res500(req, res, err)
-        });
-        req.pipe(busboy);
-    }
-}
-
 function JSONBody(req, res, next) {
     try {
         req.body = JSON.parse(req.body.toString("utf8"));
@@ -88,30 +53,6 @@ function JSONBody(req, res, next) {
         res.writeHead(412);
         res.end();
     }
-}
-
-function resRender(path, req, res, opts) {
-    if (!opts) opts = {};
-    req.helpers = HELPERS;
-
-    console.log("Render:", path);
-    return import("./templates/" + path)
-        .then(template => {
-            res.writeHead(opts.status || 200, {"Content-Type": "text/html; charset=UTF-8"});
-            res.end(template.default(req, res, opts))
-        })
-        // .catch(error => res500(req, res));
-}
-
-
-function res500(req, res, err) {
-    resRender("500", req, res, {status: 500});
-    if (err) console.trace(err);
-    else console.trace("RES500");
-}
-
-function res404(req, res) {
-    resRender("404", req, res, {status: 404});
 }
 
 function resEndFile(path, res) {
@@ -153,7 +94,7 @@ function foreach(xs, template) {
     return result;
 }
 
-const DEFAULT_METHODS = ["get", "post", "put"],
+const DEFAULT_METHODS = ["GET", "POST", "PUT"],
     HELPERS = {
         css() {
             return foreach(arguments, path => `<link href="${path}.css" type="text/css" rel="stylesheet" />`)
@@ -183,12 +124,18 @@ export default class {
         this._server.listen(port, ip);
     }
 
-
-    constructor(root = __DIRNAME, methods = DEFAULT_METHODS) {
+    constructor({
+                    root = __DIRNAME,
+                    methods = DEFAULT_METHODS,
+                    templates = path.join(__DIRNAME, "/templates")
+                }) {
         const public_path = path.join(__DIRNAME, "public");
 
         this._sessions = {};
-        this._router = {param: {}};
+        this._templates = templates;
+        this._routes = {};
+        this._paramRoutes = {};
+        this.router = {}
 
         this._server = http.createServer((req, res) => {
             req.url = url.parse(req.url);
@@ -213,12 +160,13 @@ export default class {
                     }
                 }
 
-                if (!(req.method in this._router)) res404(req, res);
-                else if (req.url.pathname in this._router[req.method]) route(req.url.pathname, req, res);
+                if (!(req.method in this._routes)) this.res404(req, res);
+                else if (req.url.pathname in this._routes[req.method]) this.route(req.url.pathname, req, res);
+                // TODO: MAKE THIS ATOMIC - move into route function
                 else {
                     let reqRoute = req.url.pathname.substring(1).split("/");
                     OUTER:
-                        for (let proute in this._router.param[req.method]) {
+                        for (let proute in this._paramRoutes[req.method]) {
                             let path = proute.substring(1).split("/");
                             if (reqRoute.length !== path.length) continue;
                             req.params = {};
@@ -228,29 +176,78 @@ export default class {
                                 if (param.indexOf(":") === 0) req.params[param.substring(1)] = reqParam;
                                 else if (param !== reqParam) continue OUTER;
                             }
-                            return route(proute, req, res);
+                            return this.route(proute, req, res);
                         }
-                    if ("*" in this._router[req.method]) route("*", req, res);
-                    else res404(req, res);
+                    if ("*" in this._routes[req.method]) this.route("*", req, res);
+                    else this.res404(req, res);
                 }
             });
         });
 
-        for (let method of methods) {
-            this._router[method.toUpperCase()] = {};
-            this._router.param[method.toUpperCase()] = {};
-            this._router[method.toLowerCase()] = function (method, route) {
-                const handlers = Array.prototype.slice.call(arguments, 2);
-                if (route.indexOf(":") === -1) this._router[method][route] = handlers;
-                else this._router.param[method][route] = handlers;
-            }.bind(null, method.toUpperCase());
-        }
+        methods.forEach(method => {
+            const routeMethod = method.toUpperCase();
+            this._routes[routeMethod] = {};
+            this._paramRoutes[routeMethod] = {};
+
+            this.router[method.toLowerCase()] = (routePath, ...handlers) => {
+                const routeType = routePath.indexOf(":") === -1 ? this._routes : this._paramRoutes;
+                routeType[routeMethod][routePath] = handlers;
+            }
+        })
     }
 
     killSession(req, res) {
         if (req.cookies.s) delete this._sessions[decodeURIComponent(req.cookies.s)];
         resClearCookie("s", res);
         console.log("SESSION KILLED");
+    }
+
+    route(path, req, res) {
+        let handler = 0;
+        const route = (path.indexOf(":") === -1 ? this._routes : this._paramRoutes)[req.method][path];
+        const next = () => route[handler++](req, res, next);
+
+        if (req.method === "GET") next();
+        else {
+            req.body = {};
+            req.files = {};
+
+            const busboy = new Busboy({headers: req.headers});
+            busboy.on("file", (fieldname, file) => {
+                const buffs = [];
+                file.on("data", data => buffs.push(data));
+                file.on("end", function () {
+                    req.files[fieldname] = Buffer.concat(buffs);
+                });
+            });
+            busboy.on("field", (fieldname, val) => req.body[fieldname] = val);
+            busboy.on("finish", next);
+            busboy.on("error", err => this.res500(req, res, err));
+            req.pipe(busboy);
+        }
+    }
+
+    render(template, req, res, opts = {}) {
+        req.helpers = HELPERS;
+
+        console.log("Render:", template);
+        return import(path.join(this._templates, template))
+            .then(template => {
+                res.writeHead(opts.status || 200, {"Content-Type": "text/html; charset=UTF-8"});
+                res.end(template.default(req, res, opts))
+            })
+        // .catch(error => this.res500(req, res));
+    }
+
+
+    res500(req, res, err) {
+        this.render("500", req, res, {status: 500});
+        if (err) console.trace(err);
+        else console.trace("RES500");
+    }
+
+    res404(req, res) {
+        this.render("404", req, res, {status: 404});
     }
 }
 
