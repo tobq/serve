@@ -2,9 +2,9 @@
   "name": "serve",
   "version": "1.0.0",
   "description": "server",
-  "main": "index.js",
+  "main": "index.mjs",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node --experimental-modules test.mjs"
   },
   "repository": {
     "type": "git",
@@ -15,5 +15,11 @@
   "bugs": {
     "url": "https://github.com/tobq/serve/issues"
   },
-  "homepage": "https://github.com/tobq/serve#readme"
+  "homepage": "https://github.com/tobq/serve#readme",
+  "dependencies": {
+    "busboy": "^0.3.0",
+    "mime": "^2.4.0",
+    "pg": "^7.8.0",
+    "request": "^2.88.0"
+  }
 }
