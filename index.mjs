@@ -127,21 +127,22 @@ export default class {
     constructor({
                     root = __DIRNAME,
                     methods = DEFAULT_METHODS,
-                    templates = path.join(__DIRNAME, "/templates")
+                    templates ,
+                    publicPath = path.join(__DIRNAME, "public")
                 }) {
-        const public_path = path.join(__DIRNAME, "public");
 
         this._sessions = {};
         this._templates = templates;
         this._routes = {};
         this._paramRoutes = {};
-        this.router = {}
+        this.router = {};
 
         this._server = http.createServer((req, res) => {
             req.url = url.parse(req.url);
             console.log(req.method, req.url.pathname);
-            let file = path.join(public_path, req.url.pathname);
-            fs.stat(file.endsWith("/") ? file + "index.html" : file, (err, stat) => {
+            let file = path.join(publicPath, req.url.pathname);
+            if (req.url.pathname.endsWith("/")) file = path.join(file, "index.html");
+            fs.stat(file, (err, stat) => {
                 if (!err && stat.isFile()) return resEndFile(file, res);
 
                 req.IP = req.headers['X-Forwarded-For'] || req.connection.remoteAddress;
@@ -231,10 +232,10 @@ export default class {
         req.helpers = HELPERS;
 
         console.log("Render:", template);
-        return import(path.join(this._templates, template))
+        return import(this._templates + template)
             .then(template => {
                 res.writeHead(opts.status || 200, {"Content-Type": "text/html; charset=UTF-8"});
-                res.end(template.default(req, res, opts))
+                res.end(template.default(req, opts))
             })
         // .catch(error => this.res500(req, res));
     }
