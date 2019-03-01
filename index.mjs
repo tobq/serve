@@ -227,16 +227,17 @@ export default class {
         }
     }
 
-    render(template, req, res, opts = {}) {
+    async render(templatePath, req, res, opts = {}) {
         req.helpers = HELPERS;
 
-        console.log("Render:", template);
-        return import(this._templates + template)
-            .then(template => {
-                res.writeHead(opts.status || 200, {"Content-Type": "text/html; charset=UTF-8"});
-                res.end(template.default(req, opts))
-            })
-        // .catch(error => this.res500(req, res));
+        console.log("Render:", templatePath);
+        try {
+            const template = await import(this._templates + templatePath);
+            res.writeHead(opts.status || 200, {"Content-Type": "text/html; charset=UTF-8"});
+            res.end(template.default(req, opts));
+        } catch (error) {
+            this.res500(req, res)
+        }
     }
 
 
