@@ -6,7 +6,6 @@ import fs from "fs";
 import request from "request";
 import Busboy from "busboy";
 import crypto from "crypto";
-import pg from "pg";
 
 function captcha(req, res, next) {
     if ("g-recaptcha-response" in req.body) {
@@ -118,16 +117,10 @@ export default class {
     //         host: "127.0.0.1",
     //         user: "postgres",
     //         database: "unicheap"
-    //     }),
-    listen(ip = DEFAULT_IP, port = DEFAULT_PORT) {
-        console.log(`LISTENING @ http://${ip}:${port}`);
-        this._server.listen(port, ip);
-    }
-
     constructor({
                     root = __DIRNAME,
                     methods = DEFAULT_METHODS,
-                    templates ,
+                    templates,
                     publicPath = path.join(__DIRNAME, "public")
                 }) {
 
@@ -195,6 +188,12 @@ export default class {
                 routeType[routeMethod][routePath] = handlers;
             }
         })
+    }
+
+    //     }),
+    listen(ip = DEFAULT_IP, port = DEFAULT_PORT) {
+        console.log(`LISTENING @ http://${ip}:${port}`);
+        this._server.listen(port, ip);
     }
 
     killSession(req, res) {
